@@ -1,14 +1,14 @@
-#Scenario 5: interaction, not synergistic
-#beta=5
-#n=50, 100, 150, 200, 250
-#signal density=2%(determine if the signal is present) * 15% (determine the signal strength)
-#three methods=RFtest, MiRKAT, OMiAT, aMiSPU
-#two signal types=non-clustered random signal and phylogenetically clustered signal
+#Source code for the scenario 5 (clear): three sample outliers
+#beta=0, 0.25, 0.5, 0.75, 1
+#signal density=15%
+#signal types = clustered vs. random
+#four methods=RFtest, MiRKAT, OMiAT, aMiSPU
+#Including three sample outliers
 
 #initialization
 setwd("/hpc/home/lz197/RFomnibus/")#to modify according to computer
 rm(list=ls())
-source("randomForestTest_parallel_omnibus2.R")
+source("randomForestTest.R")
 source("getDescendants.R")
 library(GUniFrac)
 library(ranger)
@@ -17,26 +17,24 @@ library(vegan)
 library(parallel)
 library(ecodist)
 
-n = c(50, 100, 150, 200, 250) #number of observations
+n <- 50 #number of observations
 iter <- 1000 #iterations, number of simulations
 
-method=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "MiHC", "aMiSPU")
+method=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "aMiSPU")
 beta0= 10
-beta1 = 1.33 #for interaction
-beta2 = 0.20 #for synergistic
+beta = c(0, 0.25, 0.5, 0.75, 1)
 signal<-c("non-phylo","phylo")
-Density = 0.15 #the second set of signaling OTUs
-Switch = 0.13 #the first set set of signaling OTUs
-
-inter = c("interaction", "synergistic")
+Density=0.15
+Density_s_1=c(0.05, 0.15) #Density in the scenario 1, to generate a y identical with the one in s1_b
+outlier_n <- c(1,3)
 pv.mat <- array(NA, 
-                dim=c(iter, length(method), length(n), length(signal), length(inter)),
-                dimnames = list(NULL, method, as.character(n),signal, inter)
-                )#iter, method, n, signal, inter; indexed by h,i,j,k,l. g=1:250 or j=1:5
+                dim=c(iter, length(method), length(beta), length(signal), length(outlier_n)),
+                dimnames = list(NULL, method, as.character(beta), signal, as.character(outlier_n))
+                )#iter, method, beta, signal, outlier_n; indexed by h,i,j,k,l
 
 load("/hpc/home/lz197/RFomnibus/adenoma_Li.RData")
 
-#to generate the sampling distribution and simulate a trait
+#to generate the sample distribution and simulate a trait
 set.seed(seed=23456)
 data.obj$otu.tab->otu.tab
 otu.tab<-t(otu.tab)
@@ -44,204 +42,169 @@ otu.tab[rowSums(otu.tab)>=20000, ]->data #sequencing depth >=20000
 Rarefy(data)$otu.tab->data
 data[,colSums(data)!=0]->data #439*2100 after rarefication
 data.obj$tree->tree.rooted
-#to locate the lineage (lineage A, S) comprising the following tips
+#to locate the lineage (lineage A, C) comprising the following tips
 lineageA<-getDescendants.tip(tree.rooted,node = 4190) #a abundant lineage
 lineageA<-tree.rooted$tip.label[lineageA] #having ~15% OTUs in x, ~21.1% abundance of total
 #length(lineageA)/length(tree.rooted$tip.label)
 # droptips<-tree.rooted$tip.label[!(tree.rooted$tip.label %in% colnames(data))]
 # setdiff(lineageA,droptips)->tempA
 # sum(colSums(data[,tempA]))/sum(colSums(data))
-lineageS<-getDescendants.tip(tree.rooted,node = 2514) #switch lineage, disjoint with lineageA
-lineageS<-tree.rooted$tip.label[lineageS] #having ~13% OTUs in x, ~12% abundance of total
-# intersect(lineageS, lineageA)
+lineageC<-getDescendants.tip(tree.rooted,node = 4300) #lineageC is a lineage under lineageA
+lineageC<-tree.rooted$tip.label[lineageC] #having ~5% OTUs in x, ~10.9% abundance of total
 # droptips<-tree.rooted$tip.label[!(tree.rooted$tip.label %in% colnames(data))]
-# setdiff(lineageS,droptips)->tempS
-# sum(colSums(data[,tempS]))/sum(colSums(data)) #the average abundance of lineageS in the population
-# length(lineageS)/length(tree.rooted$tip.label) #the proportion of OTUs in S to population
-#not proportion of OTUs in lineageS to x because rare OTU may be singled out when resampled from the population
+# setdiff(lineageC,droptips)->tempC
+# sum(colSums(data[,tempC]))/sum(colSums(data))
+# length(lineageC)/length(tree.rooted$tip.label)
 
-set.seed(seed=556)#not equal to s5_b_run4
-#for different method, sample size(n), signal, inter, using the same x.index, x and phylogenetic tree
+#Outliers by change the OTU order
+#for(i in 1:3) data[i,]<-sample(data[i,])
+#rownames(data)[1:3]<-c("outlier1","ourlier2","outlier3")
+#GUniFrac(otu.tab = data,tree = tree.rooted, alpha = 0.5)$unifracs[,,"d_0.5"]->dis
+#pheatmap::pheatmap(dis)
+
+#Or else, directly use the outlier "CRC636xD707xD507"
+# GUniFrac(otu.tab = data,tree = tree.rooted, alpha = 0.5)$unifracs[,,"d_0.5"]->dis
+# pheatmap::pheatmap(dis)
+# hist(apply(dis,MARGIN=1,median))
+# rownames(dis)[apply(dis,MARGIN=1,median)>0.3]
+# outlier="CRC636xD707xD507"
+# outlier.pos<-which(rownames(data)==outlier)
+
+set.seed(seed=1123456) #resue the random seed from scenario 1 continuous
+#for different method, beta, signal, outlier_n, using the same x.index, x and phylogenetic tree
 #for different iter, using different x and trees
-x.index<-matrix(NA, nrow=n[length(n)], ncol=iter)#sample size, iter; indexed by g, h.
-#Using the largest n to generate the sampling distribution. For a smaller n, use the first 1:n[j] observations
-#Therefore, 1:50 is in 1:100, and 1:100 is in 1:150 ...
-for(h in 1:iter) x.index[,h]<-sample(1:nrow(data),n[length(n)])
+#the outliers will be later created using the first 1-3 sample(s)
+x.index<-matrix(NA, nrow=n, ncol=iter) #sample size, iter; indexed by g, h. Should be the same with s1_b
+for(h in 1:iter) x.index[,h]<-sample(1:nrow(data),n)
 
-# tempS<-integer(iter)
-# for(h in 1:iter) {
-  # x <- data[x.index[,h],]
-  # x <- x[,colSums(x)>=1]  #50*1506
-  # droptips<-tree.rooted$tip.label[!(tree.rooted$tip.label %in% colnames(x))]
-  # length(setdiff(lineageS,droptips))/ncol(x)->tempS[h]
-# }
-# mean(tempS) #having ~2% OTUs in x
-
-
-#for different samples, iter, signal, inter, using different y
-#for different methods, using the same y. For different sample sizes, use the first several records.
-#in a sample with a size other than 250, the first, for exmaple, 50 will have a valid record while the 
-#following numbers would be NAs. 
+#for different samples, iter, beta, signal, using different y
+#for different methods, using the same y
+#for different outlier_n, use the same y (correct signal)
 y<-array(NA, 
-         dim=c(n[length(n)], iter, length(n), length(signal), length(inter)),
-         dimnames = list(NULL, NULL, as.character(n), signal, inter)
-)#sample size, iter, n, signal, inter; indexed by g,h,j,k,l. g=1:250 or j=1:5
+         dim=c(n, iter, length(beta), length(signal), length(Density_s_1)),
+         dimnames = list(NULL, NULL, as.character(beta),signal, as.character(Density_s_1))
+)#sample size, iter, beta, signal, Density_s_1; indexed by g,h,j,k,l-1
+#as for y, l means Density, while for pv.mat, l means outlier number
+
 
 for(h in 1:iter){
   #generate x which are determined by the x.index
   #the x.index is determined by h
-  x.all <- data[x.index[,h],] #retrieve all (250) x.index to generate signal.tips
-  x.all <- x.all[,colSums(x.all)>=1]  #250*2000
-  #droptips<-tree.rooted$tip.label[!(tree.rooted$tip.label %in% colnames(x))]
-  #generate y
-  #y varies according to different samples, iter, n, beta, signal, inter
+  x <- data[x.index[,h],]
+  x <- x[,colSums(x)>=1]  #50*1506
+  droptips<-tree.rooted$tip.label[!(tree.rooted$tip.label %in% colnames(x))]
+  
+  #Do NOT add outliers here as y should be generated by correct samples
+
+  #Reused from s1_c. To generate y identical with s1_c
+  #y varies according to different samples, iter, beta, signal
   for(k in 1:length(signal)){
-    signal.tips <- vector(mode = "list", length=2)
-    names(signal.tips) <- c("switch", "density")
+	signal.tips<-vector(mode="list", length=length(Density_s_1))
+	names(signal.tips)<-paste("Density_s_1=",Density_s_1,sep="")
     if(signal[k]=="non-phylo"){
-      OTU.list<-sample(colnames(x.all)) #randomize names of x for each iter
-      signal.tips[[1]] <- OTU.list[ 1                             :  round(ncol(x.all)*Switch)                         ]
-      signal.tips[[2]] <- OTU.list[ (round(ncol(x.all)*Switch)+1) : (round(ncol(x.all)*Switch)+round(ncol(x.all)*Density)) ]
-      #the first 2% and the following 15%
+      OTU.list<-sample(colnames(x)) #randomize names of x for each iter
+	  for(l in 1:length(Density_s_1)){
+		#for different Density_s_1, use the same order of OTU.list
+		#therefore, 1:round(ncol(x)*0.15) > 1:round(ncol(x)*0.05)
+		signal.tips[[l]]<- OTU.list[1:round(ncol(x)*Density_s_1[l])]
+	  }
     }else if(signal[k]=="phylo"){
-      if(abs(Switch-0.13)<1e-5)  signal.tips[[1]] <- lineageS else stop("Switch is not 0.13")
-      if(abs(Density-0.15)<1e-5) signal.tips[[2]] <- lineageA else stop("Density is not 0.15")
+	  for(l in 1:length(Density_s_1)){
+		if(abs(Density_s_1[l]-0.05)<1e-5) 
+			setdiff(lineageC,droptips)->signal.tips[[l]] else #the tips in the new tree in lineage C in each simulation
+		if(abs(Density_s_1[l]-0.15)<1e-5)
+			setdiff(lineageA,droptips)->signal.tips[[l]] else
+		stop("Density_s_1 is not 0.05 or 0.15")
+	  }
     }else stop("signal is not non-phylo or phylo")
-    for(j in 1:length(n)){
-      x <- data[x.index[1:n[j],h],] #retrieve the first 50 or 100 records x.index to generate y
-      x <- x[,colSums(x)>=1] #50*1511
-      droptips<-tree.rooted$tip.label[!(tree.rooted$tip.label %in% colnames(x))]
-      lapply(signal.tips, setdiff,  y = droptips) -> signal.tips.filtered
-      
-      signal.strength <- vector(mode = "list", length=2)
-      names(signal.strength) <- c("switch", "density")
-      for(ii in 1:2){
-        if(signal[k]=="non-phylo"){
-          signal.strength[[ii]] <- 
-            rowSums(t(t(x[,signal.tips.filtered[[ii]]]) / colMeans(x[,signal.tips.filtered[[ii]]])))
-          # matrix / vector element-wise by col
-          # Zij/mean(Zj) to avoid a single or a few OTUs dominating the total effect.
-        }else if(signal[k]=="phylo")
-          signal.strength[[ii]]<-rowSums(x[,signal.tips.filtered[[ii]]])
-      }
-      for(l in 1:length(inter)){
-        if(inter[l]=="interaction"){
-          q=beta0 + beta1 * scale(signal.strength[[1]])*scale(signal.strength[[2]]) 
-          # for each beta and sample, signal tips are the same
-          # center the signal strength at 0 to reduce the marginal effect
-          # because signal.strength is not symmetrically distributed, q here may be still correlated with signal.strength?
-          # cor(x=q[2,],y=signal.strength[[2]],method="s")
-          temp <- rnorm(n[j])
-          y[1:n[j],h,j,k,l] <- q + temp
-          #NOTE on rbinom: rbinom(n, size, prob), if n < length(prob), it will generate the first nth binomial random variable 
-          #according to p; if n > length(prob), it will recycle prob; if n = length(prob), it will give the binomial sample according
-          #to the probability given by prob. Therefore, as the row of p is the probability of one sample under a specific beta,
-          #this apply(X=p, MARGIN=1, FUN=rbinom, n=n, size=1) should generate the desired binomial random sample (with different
-          #probability).
-          #temp<-sapply(1:1e4, function(i) rbinom(n=5, size=1, prob=c(0.1,0.2,0.4,0.6,0.8)))
-          #apply(temp,MARGIN=1,sum)/1e4
-        }else if(inter[l]=="synergistic"){
-          lapply(signal.strength, FUN = function(.x) scale(.x)-min(scale(.x)) )-> temp
-          y[1:n[j],h,j,k,l] <- beta0 + beta2*temp[[1]]*temp[[2]]+rnorm(n[j])
-        }
-      }
-    }
+	for(l in 1:length(Density_s_1)){
+	  if(signal[k]=="non-phylo") #Zij/mean(Zj) to avoid a single or a few OTUs dominating the total effect.
+		signal.strength<-rowSums(t(t(x[,signal.tips[[l]]]) / colMeans(x[,signal.tips[[l]]]))) else # matrix/vector element-wise
+	  if(signal[k]=="phylo")
+	    signal.strength<-rowSums(x[,signal.tips[[l]]])
+	  q=beta0+
+		matrix(beta, ncol=1) %*% matrix(scale(signal.strength), nrow=1)#for each beta and sample, signal tips are the same
+      rownames(q)<-as.character(beta);colnames(q)<-names(signal.strength)
+	  temp <- rnorm(n) # for different Density, use different error term
+	  y[ ,h, ,k,l] <- apply(X=q, MARGIN = 1, "+" ,temp) #for each beta, the added noise are the same
+	}
   }
 }
 
+save.image(file="/hpc/home/lz197/RFomnibus/s5_c.RData")
 
 #on computer cluster
-cores =10 #to modify according to computer
+cores = 10 #to modify according to computer
 
-#set.seed(seed=5612344)
 for(h in 1:iter){
+  set.seed(seed = h+1000) #a somewhat dirty method
   if(h %% round(iter/100) == 0) cat(".")
-  for(j in 1:length(n)){
-    #generate x and tree which are determined by the x.index and j (sample size)
-    #the x.index is determined by h
-    x <- data[x.index[1:n[j],h],] #the same x used to generate signal.tips.filtered, signal strength and y
-    x <- x[,colSums(x)>=1]
-    droptips<-tree.rooted$tip.label[!(tree.rooted$tip.label %in% colnames(x))]
-    tree <- drop.tip(phy = tree.rooted, tip = droptips) #a real tree
-    if(sum(!(colnames(x) %in% tree$tip.label))==0) 
-      x<-x[,tree$tip.label] else stop("don't match") #order x according to the tree
+  #generate x which are determined by the x.index
+  #the x.index is determined by h
+  x <- data[x.index[,h],]
+  x <- x[,colSums(x)>=1]  #50*1506
+
+  #add outliers
+  x.list<-vector(mode = "list", length=length(outlier_n))
+  for(l in 1:length(outlier_n)){
+    if(l ==1) {
+      x.list[[l]] <- x
+    } else x.list[[l]] <- x.list[[l-1]]  #inherent from the previous x, to make them comparable
     
-    #For MiRKAT
-    unifracs = GUniFrac(x, tree=tree, alpha = c(1))$unifracs
-    Ds = list(w = unifracs[,,"d_1"], uw = unifracs[,,"d_UW"],
-    BC= as.matrix(vegdist(x, method="bray")))
-    Ks = lapply(Ds, FUN = function(d) MiRKAT::D2K(d))
-    
-    for(k in 1:length(signal)){
-      for(l in 1:length(inter)){
-        #method[i]=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "MiHC", "aMiSPU")
-        #obtain y=y[1:n[j],h,j,k,l] #sample size, iter, n, signal, inter; indexed by g,h,j,k,l
-		    #the first 1:n[j] ys should be non-NAs
-        #pv.mat = iter, method, n, signal, inter; indexed by h,i,j,k,l. g=1:250 or j=1:5
-        #RF omnibus test
-        pv1 <- randomForestTest_parallel_omnibus2(comm = x , meta.data = data.frame(y=y[1:n[j],h,j,k,l]), tree=tree, 
-                                                  response.var="y", perm.no = 999, n.cores=cores, test.type = "Training",
-												  method = "o", prediction.type = 'Regression')
-        pv1$p.value.perm[c("weighted", "unweighted","Omnibus")]->pv.mat[h,c("wRF", "uwRF","Omnibus.RF"),j,k,l]
-        #MiRKAT
-        pv2 <- MiRKAT::MiRKAT(rank(y[1:n[j],h,j,k,l]), Ks = Ks, out_type="C",nperm=999)
-        pv2$omnibus_p -> pv.mat[h,c("Omnibus.MiRKAT"),j,k,l]
-        #OMiAT
-        pv3 <- OMiAT::OMiAT(Y=rank(y[1:n[j],h,j,k,l]), otu.tab=x, tree=tree, model="continous",n.perm=999)
-        pv3$OMiAT.pvalue -> pv.mat[h,c("OMiAT"),j,k,l]
-        #aMiSPU
-        pv4 <- MiSPU::MiSPU(y = y[1:n[j],h,j,k,l], X= as.matrix(x), tree=tree, model="gaussian", n.perm = 999)
-        pv4$aMiSPU$pvalue -> pv.mat[h,c("aMiSPU"),j,k,l]
-        # #MiHC
-        # pv5 <- MiHC::MiHC(y=y[1:n[j],h,j,k,l], otu.tab=x, tree = tree, model="gaussian", n.perm=999)
-        # pv5$ada.pvs["MiHC"] -> pv.mat[h,c("MiHC"),j,k,l]
-      }
+    if(l ==1) {
+      st <- 1
+      en <- outlier_n[l]
+    } else {
+      st <- outlier_n[l-1]+1
+      en <- outlier_n[l]
     }
+    
+    for(temp in st:en) 
+      x.list[[l]][temp, ] <- sample(x.list[[l]][temp, ]) #determined by the random seed above; thus, determined by h
+    rownames(x.list[[l]])[st:en] <- paste("outlier", st:en, sep="")
+  }
+  
+  #re-exclude all-zero OTUs and adapt phylogenetic tree
+  tree.list <- vector(mode = "list", length=length(outlier_n))
+  for(l in 1:length(outlier_n)){
+    x.list[[l]] <- x.list[[l]][,colSums(x.list[[l]])>=1]
+    droptips<-tree.rooted$tip.label[!(tree.rooted$tip.label %in% colnames(x.list[[l]]))] #not used in the following steps
+    tree.list[[l]] <- drop.tip(phy = tree.rooted, tip = droptips) #a real tree
+    if(sum(!(colnames(x.list[[l]]) %in% tree.list[[l]]$tip.label))==0) 
+      x.list[[l]]<-x.list[[l]][,tree.list[[l]]$tip.label] else stop("don't match") #order x according to the tree
+  }
+  
+  #For MiRKAT
+  Ks<-vector(mode = "list", length=length(outlier_n))
+  for(l in 1:length(outlier_n)){
+    unifracs = GUniFrac(x.list[[l]], tree=tree.list[[l]], alpha = c(1))$unifracs
+    Ds = list(w = unifracs[,,"d_1"], uw = unifracs[,,"d_UW"],
+              BC= as.matrix(vegdist(x.list[[l]], method="bray")))
+    Ks[[l]] = lapply(Ds, FUN = function(d) MiRKAT::D2K(d))
+  }
+  
+  for(k in 1:length(signal)){
+		for(j in 1:length(beta)){
+			for(l in 1:length(outlier_n)) {
+				#method[i]=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "MiHC", "aMiSPU")
+				#obtain y=y[ ,h,j,k,"0.15"]
+				#RF omnibus test
+				pv1 <- randomForestTest(comm = x.list[[l]] , meta.data = data.frame(y=y[ ,h,j,k,"0.15"]), tree=tree.list[[l]], 
+					   response.var="y", perm.no = 999, n.cores=cores, test.type = "OOB",method = "w", prediction.type = 'Regression',presence.in=1)
+				pv1$p.value.perm->pv.mat[h,c("wRF"),j,k,l]
+				#MiRKAT
+				pv2 <- MiRKAT::MiRKAT(y[ ,h,j,k,"0.15"], Ks = Ks[[l]], out_type="C",nperm=999)
+				pv2$omnibus_p -> pv.mat[h,c("Omnibus.MiRKAT"),j,k,l]
+				#OMiAT
+				pv3 <- OMiAT::OMiAT(Y=y[ ,h,j,k,"0.15"], otu.tab=x.list[[l]], tree=tree.list[[l]], model="continous",n.perm=999)
+				pv3$OMiAT.pvalue -> pv.mat[h,c("OMiAT"),j,k,l]
+				#aMiSPU
+				pv4 <- MiSPU::MiSPU(y = y[ ,h,j,k,"0.15"], X= as.matrix(x.list[[l]]), tree=tree.list[[l]], model="gaussian", n.perm = 999)
+				pv4$aMiSPU$pvalue -> pv.mat[h,c("aMiSPU"),j,k,l]
+			}
+		}
   }
   if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/s5_c.RData")
 }
 save.image(file="/hpc/home/lz197/RFomnibus/s5_c.RData")
 
-#, , non-phylo, synergistic
-#               50 100 150 200 250
-#wRF            71  88  92  96  99
-#Omnibus.MiRKAT 68  83  89  96  99
-#OMiAT          NA  NA  NA  NA  NA
-#aMiSPU         42  40  50  67  72
-
-#, , phylo, synergistic
-#               50 100 150 200 250
-#wRF            26  54  71  85  94
-#Omnibus.MiRKAT 28  47  64  90  94
-#OMiAT          NA  NA  NA  NA  NA
-#aMiSPU         35  55  76  94  93
-
-
-#> temp
-#, , non-phylo, interaction
-#               50 100 150 200 250
-#wRF            11  14  26  32  33
-#Omnibus.MiRKAT  8  16  31  40  31
-#OMiAT           9  14  35  33  31
-#aMiSPU         13  16  23  25  35
-
-#, , phylo, interaction
-#               50 100 150 200 250
-#wRF            11  38  59  73  75
-#Omnibus.MiRKAT 12  11  24  40  44
-#OMiAT           9  15  26  35  41
-#aMiSPU         13  13  25  33  46
-
-#, , non-phylo, synergistic
-#               50 100 150 200 250
-#wRF            40  51  57  60  64
-#Omnibus.MiRKAT 42  53  55  66  67
-#OMiAT          49  62  69  73  72
-#aMiSPU         29  22  29  40  32
-
-#, , phylo, synergistic
-#               50 100 150 200 250
-#wRF             3  26  31  46  46
-#Omnibus.MiRKAT  6  24  32  48  50
-#OMiAT           9  26  29  41  50
-#aMiSPU          8  28  35  50  54

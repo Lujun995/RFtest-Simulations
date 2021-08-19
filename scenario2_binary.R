@@ -1,10 +1,10 @@
-#Source code for scenario 2 (clear): different lineages, continuous outcomes
-#beta = 0.35
-#n = 50
-#signal density = 10~15%
-#five methods = RFtest, MiRKAT, OMiAT, aMiSPU
-#signal type = phylogenetically clustered OTUs
-#seven different lineages
+#Source code for scenario 2 (clear): different lineages and different linking function, binary outcomes
+#beta=1
+#n=50
+#signal density = 5~20%
+#three methods=RFtest, MiRKAT, OMiAT, aMiSPU
+#signal type=phylogenetically clustered OTUs
+#five different lineages
 
 #initialization
 setwd("/hpc/home/lz197/RFomnibus/")#to modify according to computer
@@ -22,8 +22,8 @@ n <- 50 #number of observations
 iter <- 1000 #iterations, number of simulations
 
 method=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "aMiSPU")
-beta0= 10
-beta = 0.35
+beta0= 0
+beta = 1
 signal<-"phylo"
 Density= 0.15
 lineage.nodes = as.character(c(4190,2514,3590,2519,2734,3399,3171))
@@ -59,20 +59,20 @@ for(l in 1:length(lineage.nodes)){
 #   cat(round(sum(colSums(data[,setdiff(lineage.list[[l]],droptips)]))/sum(colSums(data))*100,2)," ")
 # #ranging from 1% to 40%, comprising more than 80% of total abundance
 
-# #check if there is an intersection between lineages
-# temp=rep(NA,length=choose(length(lineage.list), 2))
-# l=1
-# for(l1 in 1:(length(lineage.list)-1)){
-  # for(l2 in (l1+1):length(lineage.list)) {
-    # temp[l]<-length(intersect(lineage.list[[l1]],lineage.list[[l2]]))
-	# l=l+1
-  # }
-# }
-# if(sum(temp!=0)!=0) 
-  # stop("There is some common OTUs between two lineages") #no intersection between every pair of lineages
+#check if there is an intersection between lineages
+temp=rep(NA,length=choose(length(lineage.list), 2))
+l=1
+for(l1 in 1:(length(lineage.list)-1)){
+  for(l2 in (l1+1):length(lineage.list)) {
+    temp[l]<-length(intersect(lineage.list[[l1]],lineage.list[[l2]]))
+	l=l+1
+  }
+}
+if(sum(temp!=0)!=0) 
+  stop("There is some common OTUs between two lineages") #no intersection between every pair of lineages
 
 
-set.seed(seed=4456)
+set.seed(seed=56)
 #for different method, beta, signal, Density, using the same x.index, x and phylogenetic tree
 #for different iter, using different x and trees
 x.index<-matrix(NA, nrow=n, ncol=iter)#sample size, iter; indexed by g, h
@@ -102,10 +102,12 @@ for(h in 1:iter){
 	  signal.strength <- #signal.strength varies according to different linking functions
 	    sapply(1:length(signal.tips),  function(l) rowSums(x.trans[,signal.tips[[l]]])) #a matrix of g-by-l
 	  colnames(signal.strength) <- names(signal.tips)
-      q = beta0+ beta * apply(signal.strength, MARGIN=2, FUN= scale) #a matrix of g-by-l
+    q = beta0+ beta * apply(signal.strength, MARGIN=2, FUN= scale) #a matrix of g-by-l
 	  rownames(q)<-rownames(signal.strength);colnames(q)<-names(signal.tips)
-	  temp<-rnorm(n)
-	  y[ ,h,k, ]<- apply(X=q, MARGIN=2, FUN="+", temp) #to simulate a trait
+	  p=exp(q)/(1+exp(q)) #inverse logit function, a matrix of g-by-l
+	  y[ ,h,k, ]<- apply(X=p, MARGIN=2, FUN=rbinom, n=n, size=1) #to simulate a trait
+	  #rbinom(n, size, prob), if n = length(prob), this function will give n random number according to porb
+	  #otherwise, it will recyle prob or use the first nth probabilities
   }
 }
 
@@ -121,15 +123,15 @@ for(h in 1:iter){
 # }
 # apply(temp,MARGIN=2,mean) #comprising 5%~20% of OTUs in x, a total of 80%
 
-save.image(file="/hpc/home/lz197/RFomnibus/s2_c.RData")
+save.image(file="/hpc/home/lz197/RFomnibus/s2_b.RData")
 
 
 
 
 #on computer cluster
-cores = 37 #to modify according to computer
+cores = 20 #to modify according to computer
 
-#set.seed(seed=4561233)
+#set.seed(seed=561234)
 for(h in 1:iter){
   if(h %% round(iter/100) == 0) cat(".")
   #generate x and tree which are determined by the x.index
@@ -147,28 +149,27 @@ for(h in 1:iter){
 			BC= as.matrix(vegdist(x, method="bray")))
   Ks = lapply(Ds, FUN = function(d) MiRKAT::D2K(d))
   
-  for(k in 1){ #only "identity" is used 
+  for(k in 1){#only "identity" is used 
 	for(l in 1:length(lineage.nodes)){
-		#method[i]=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "MiHC", "aMiSPU")
+		#method[i]=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "aMiSPU")
 		#y: sample size, iter, linking.method, lineage.nodes; indexed by g,h,k,l
 		#obtain y=y[ ,h,k,l]
 		#pv.mat:iter, method, linking, lineag.nodes; indexed by h,i,k,l
 		#RF omnibus test
-		pv1 <- randomForestTest(comm = x , meta.data = data.frame(y=y[ ,h,k,l]), tree=tree, 
-               response.var="y", perm.no = 999, n.cores=cores, test.type = "OOB", method = "w",
-               prediction.type = 'Regression', presence.in=1)
+		pv1 <- randomForestTest(comm = x , meta.data = data.frame(y=factor(y[ ,h,k,l])), tree=tree, 
+               response.var="y", perm.no = 999, n.cores=cores, test.type = "OOB",method = "w", presence.in=1)
 		pv1$p.value.perm->pv.mat[h,c("wRF"),k,l]
 		#MiRKAT
-		pv2 <- MiRKAT::MiRKAT(y[ ,h,k,l], Ks = Ks, out_type="C",nperm=999)
+		pv2 <- MiRKAT::MiRKAT(y[ ,h,k,l], Ks = Ks, out_type="D",nperm=999)
 		pv2$omnibus_p -> pv.mat[h,c("Omnibus.MiRKAT"),k,l]
 		#OMiAT
-		pv3 <- OMiAT::OMiAT(Y=y[ ,h,k,l], otu.tab=x, tree=tree, model="continous",n.perm=999)
+		pv3 <- OMiAT::OMiAT(Y=y[ ,h,k,l], otu.tab=x, tree=tree, model="binomial",n.perm=999)
 		pv3$OMiAT.pvalue -> pv.mat[h,c("OMiAT"),k,l]
 		#aMiSPU
-		pv4 <- MiSPU::MiSPU(y = y[ ,h,k,l], X= as.matrix(x), tree=tree, model="gaussian", n.perm = 999)
+		pv4 <- MiSPU::MiSPU(y = y[ ,h,k,l], X= as.matrix(x), tree=tree, model="binomial", n.perm = 999)
 		pv4$aMiSPU$pvalue -> pv.mat[h,c("aMiSPU"),k,l]
 	}
   }
-  if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/s2_c.RData")
+  if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/s2_b.RData")
 }
-save.image(file="/hpc/home/lz197/RFomnibus/s2_c.RData")
+save.image(file="/hpc/home/lz197/RFomnibus/s2_b.RData")

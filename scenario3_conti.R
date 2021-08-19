@@ -1,4 +1,4 @@
-#Scenario 3: different linking functions
+#Source code for scenario 3 (clear): different linking functions
 #beta= 0, 0.25, 0.5, 0.75, 1
 #signal density=15%
 #four methods= RFtest, MiRKAT, OMiAT, aMiSPU
@@ -8,7 +8,7 @@
 #initialization
 setwd("/hpc/home/lz197/RFomnibus/")#to modify according to computer
 rm(list=ls())
-source("randomForestTest_parallel_omnibus2.R")
+source("randomForestTest.R")
 source("getDescendants.R")
 library(GUniFrac)
 library(ranger)
@@ -20,7 +20,7 @@ library(ecodist)
 n <- 50 #number of observations
 iter <- 1000 #iterations, number of simulations
 
-method=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "MiHC", "aMiSPU")
+method=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "aMiSPU")
 beta0= 10
 beta = c(0, 0.25, 0.5, 0.75, 1)
 signal<-c("non-phylo","phylo")
@@ -115,34 +115,31 @@ for(h in 1:iter){
   if(sum(!(colnames(x) %in% tree$tip.label))==0) 
     x<-x[,tree$tip.label] else stop("don't match") #order x according to the tree
 
-#   #for MiRKAT
-#   unifracs = GUniFrac(x, tree=tree, alpha = c(1))$unifracs
-#   Ds = list(w = unifracs[,,"d_1"], uw = unifracs[,,"d_UW"],
-# 			BC= as.matrix(vegdist(x, method="bray")))
-#   Ks = lapply(Ds, FUN = function(d) MiRKAT::D2K(d))
+  #for MiRKAT
+  unifracs = GUniFrac(x, tree=tree, alpha = c(1))$unifracs
+  Ds = list(w = unifracs[,,"d_1"], uw = unifracs[,,"d_UW"],
+			BC= as.matrix(vegdist(x, method="bray")))
+  Ks = lapply(Ds, FUN = function(d) MiRKAT::D2K(d))
   
   for(k in 1:length(signal)){
-	  for(l in 1:length(linking.method)){
+	  for(l in 1){ #link function = log2
 		for(j in 1:length(beta)){
 			#method[i]=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "MiHC", "aMiSPU")
 			#obtain y=y[ ,h,j,k,l]
 			#RF omnibus test
-			pv1 <- randomForestTest_parallel_omnibus2(comm = x , meta.data = data.frame(y=y[ ,h,j,k,l]), tree=tree,
-                  response.var="y", perm.no = 999, n.cores=cores, test.type = "Training", method = "o", 
-				  prediction.type = 'Regression')
-			pv1$p.value.perm[c("weighted", "unweighted","Omnibus")]->pv.mat[h,c("wRF", "uwRF","Omnibus.RF"),j,k,l]			
-			# #MiRKAT
-			# pv2 <- MiRKAT::MiRKAT(y[ ,h,j,k,l], Ks = Ks, out_type="C",nperm=999)
-			# pv2$omnibus_p -> pv.mat[h,c("Omnibus.MiRKAT"),j,k,l]
-			# #OMiAT
-			# pv3 <- OMiAT::OMiAT(Y=y[ ,h,j,k,l], otu.tab=x, tree=tree, model="continous",n.perm=999)
-			# pv3$OMiAT.pvalue -> pv.mat[h,c("OMiAT"),j,k,l]
-			# #aMiSPU
-			# pv4 <- MiSPU::MiSPU(y = y[ ,h,j,k,l], X= as.matrix(x), tree=tree, model="gaussian", n.perm = 999)
-			# pv4$aMiSPU$pvalue -> pv.mat[h,c("aMiSPU"),j,k,l]
-			# #MiHC
-			# pv5 <- MiHC::MiHC(y=y[ ,h,j,k,l], otu.tab=x, tree = tree, model="gaussian", n.perm=999)
-			# pv5$ada.pvs["MiHC"] -> pv.mat[h,c("MiHC"),j,k,l]
+			pv1 <- randomForestTest(comm = x , meta.data = data.frame(y=y[ ,h,j,k,l]), tree=tree,
+                  response.var="y", perm.no = 999, n.cores=cores, test.type = "OOB", method = "w", 
+				  prediction.type = 'Regression', presence.in=1)
+			pv1$p.value.perm->pv.mat[h,c("wRF"),j,k,l]			
+			#MiRKAT
+			pv2 <- MiRKAT::MiRKAT(y[ ,h,j,k,l], Ks = Ks, out_type="C",nperm=999)
+			pv2$omnibus_p -> pv.mat[h,c("Omnibus.MiRKAT"),j,k,l]
+			#OMiAT
+			pv3 <- OMiAT::OMiAT(Y=y[ ,h,j,k,l], otu.tab=x, tree=tree, model="continous",n.perm=999)
+			pv3$OMiAT.pvalue -> pv.mat[h,c("OMiAT"),j,k,l]
+			#aMiSPU
+			pv4 <- MiSPU::MiSPU(y = y[ ,h,j,k,l], X= as.matrix(x), tree=tree, model="gaussian", n.perm = 999)
+			pv4$aMiSPU$pvalue -> pv.mat[h,c("aMiSPU"),j,k,l]
 		}
 	  }
   }

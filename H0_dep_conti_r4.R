@@ -4,7 +4,7 @@
 #initialization
 setwd("/hpc/home/lz197/RFomnibus/")#to modify according to computer
 rm(list=ls())
-source("randomForestTest_parallel_omnibus2_updated3.R")
+source("randomForestTest_parallel_omnibus2_updated9.R")
 source("getDescendants.R")
 library(GUniFrac)
 library(ranger)
@@ -89,6 +89,6 @@ for(h in 1:iter){
 				  prediction.type = 'Regression')
   pv1$p.value.perm[c("weighted", "unweighted","Omnibus")]->pv.mat[h,c("wRF", "uwRF","Omnibus.RF")]
 
-  if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/H0_d_c_r3.RData")
+  if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/H0_d_c_r4.RData")
 }
-save.image(file="/hpc/home/lz197/RFomnibus/H0_d_c_r3.RData")
+save.image(file="/hpc/home/lz197/RFomnibus/H0_d_c_r4.RData")

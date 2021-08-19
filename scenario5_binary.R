@@ -1,15 +1,14 @@
-#Scenario 2: three sample outliers
+#Source code for the scenario 5 (clear): three sample outliers
 #beta=0,0.5,1,1.5,2
 #signal density=15%
 #signal types = clustered vs. random
 #four methods=RFtest, MiRKAT, OMiAT, aMiSPU
-#three signal types=rare OTUs, abundant OTUs and phylogenetically clustered OTUs
 #Including three sample outliers
 
 #initialization
 setwd("/hpc/home/lz197/RFomnibus/")#to modify according to computer
 rm(list=ls())
-source("randomForestTest_parallel_omnibus2.R")
+source("randomForestTest.R")
 source("getDescendants.R")
 library(GUniFrac)
 library(ranger)
@@ -21,7 +20,7 @@ library(ecodist)
 n <- 50 #number of observations
 iter <- 1000 #iterations, number of simulations
 
-method=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "MiHC", "aMiSPU")
+method=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "aMiSPU")
 beta0= 0
 beta = c(0, 0.75, 1.5, 2.25, 3)
 signal<-c("non-phylo","phylo")
@@ -138,7 +137,7 @@ for(h in 1:iter){
   }
 }
 
-save.image(file="/hpc/home/lz197/RFomnibus/s2_b_run5.RData")
+save.image(file="/hpc/home/lz197/RFomnibus/s5_b.RData")
 
 #on computer cluster
 cores = 10 #to modify according to computer
@@ -181,14 +180,14 @@ for(h in 1:iter){
       x.list[[l]]<-x.list[[l]][,tree.list[[l]]$tip.label] else stop("don't match") #order x according to the tree
   }
   
-  # #For MiRKAT
-  # Ks<-vector(mode = "list", length=length(outlier_n))
-  # for(l in 1:length(outlier_n)){
-    # unifracs = GUniFrac(x.list[[l]], tree=tree.list[[l]], alpha = c(1))$unifracs
-    # Ds = list(w = unifracs[,,"d_1"], uw = unifracs[,,"d_UW"],
-              # BC= as.matrix(vegdist(x.list[[l]], method="bray")))
-    # Ks[[l]] = lapply(Ds, FUN = function(d) MiRKAT::D2K(d))
-  # }
+  #For MiRKAT
+  Ks<-vector(mode = "list", length=length(outlier_n))
+  for(l in 1:length(outlier_n)){
+    unifracs = GUniFrac(x.list[[l]], tree=tree.list[[l]], alpha = c(1))$unifracs
+    Ds = list(w = unifracs[,,"d_1"], uw = unifracs[,,"d_UW"],
+              BC= as.matrix(vegdist(x.list[[l]], method="bray")))
+    Ks[[l]] = lapply(Ds, FUN = function(d) MiRKAT::D2K(d))
+  }
   
   for(k in 1:length(signal)){
 		for(j in 1:length(beta)){
@@ -196,25 +195,22 @@ for(h in 1:iter){
 				#method[i]=c("wRF","uwRF", "Omnibus.RF", "Omnibus.MiRKAT", "OMiAT", "MiHC", "aMiSPU")
 				#obtain y=y[ ,h,j,k,"0.15"]
 				#RF omnibus test
-				pv1 <- randomForestTest_parallel_omnibus2(comm = x.list[[l]] , meta.data = data.frame(y=factor(y[ ,h,j,k,"0.15"])), tree=tree.list[[l]], 
-					   response.var="y", perm.no = 999, n.cores=cores, test.type = "Training",method = "o")
-				pv1$p.value.perm[c("weighted", "unweighted","Omnibus")]->pv.mat[h,c("wRF", "uwRF","Omnibus.RF"),j,k,l]
-				# #MiRKAT
-				# pv2 <- MiRKAT::MiRKAT(y[ ,h,j,k,"0.15"], Ks = Ks[[l]], out_type="D",nperm=999)
-				# pv2$omnibus_p -> pv.mat[h,c("Omnibus.MiRKAT"),j,k,l]
-				# #OMiAT
-				# pv3 <- OMiAT::OMiAT(Y=y[ ,h,j,k,"0.15"], otu.tab=x.list[[l]], tree=tree.list[[l]], model="binomial",n.perm=999)
-				# pv3$OMiAT.pvalue -> pv.mat[h,c("OMiAT"),j,k,l]
-				# #aMiSPU
-				# pv4 <- MiSPU::MiSPU(y = y[ ,h,j,k,"0.15"], X= as.matrix(x.list[[l]]), tree=tree.list[[l]], model="binomial", n.perm = 999)
-				# pv4$aMiSPU$pvalue -> pv.mat[h,c("aMiSPU"),j,k,l]
-				# # #MiHC
-				# # pv5 <- MiHC::MiHC(y=y[ ,h,j,k,"0.15"], otu.tab=x.list[[l]], tree = tree.list[[l]], model="binomial", n.perm=999)
-				# # pv5$ada.pvs["MiHC"] -> pv.mat[h,c("MiHC"),j,k,l]
+				pv1 <- randomForestTest(comm = x.list[[l]] , meta.data = data.frame(y=factor(y[ ,h,j,k,"0.15"])), tree=tree.list[[l]], 
+					   response.var="y", perm.no = 999, n.cores=cores, test.type = "OOB",method = "w",presence.in=1)
+				pv1$p.value.perm->pv.mat[h,c("wRF"),j,k,l]
+				#MiRKAT
+				pv2 <- MiRKAT::MiRKAT(y[ ,h,j,k,"0.15"], Ks = Ks[[l]], out_type="D",nperm=999)
+				pv2$omnibus_p -> pv.mat[h,c("Omnibus.MiRKAT"),j,k,l]
+				#OMiAT
+				pv3 <- OMiAT::OMiAT(Y=y[ ,h,j,k,"0.15"], otu.tab=x.list[[l]], tree=tree.list[[l]], model="binomial",n.perm=999)
+				pv3$OMiAT.pvalue -> pv.mat[h,c("OMiAT"),j,k,l]
+				#aMiSPU
+				pv4 <- MiSPU::MiSPU(y = y[ ,h,j,k,"0.15"], X= as.matrix(x.list[[l]]), tree=tree.list[[l]], model="binomial", n.perm = 999)
+				pv4$aMiSPU$pvalue -> pv.mat[h,c("aMiSPU"),j,k,l]
 			}
 		}
   }
-  if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/s2_b_run5.RData")
+  if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/s5_b.RData")
 }
-save.image(file="/hpc/home/lz197/RFomnibus/s2_b_run5.RData")
+save.image(file="/hpc/home/lz197/RFomnibus/s5_b.RData")
 
