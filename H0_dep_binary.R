@@ -1,10 +1,10 @@
-#H0_d_c: type I error, with dependent Zi, binary outcome
+#H0_d_b: type I error, with dependent Zi, binary outcome
 #sample size=50
 
 #initialization
 setwd("/hpc/home/lz197/RFomnibus/")#to modify according to computer
 rm(list=ls())
-source("randomForestTest_parallel_omnibus2_updated9.R")
+source("randomForestTest_parallel_omnibus2_updated17.R")
 source("getDescendants.R")
 library(GUniFrac)
 library(ranger)
@@ -16,7 +16,7 @@ n <- 50 #number of observations
 iter <- 1000 #iterations, number of simulations
 
 method=c("wRF","uwRF", "Omnibus.RF")
-beta0= 10
+beta0= 0
 pv.mat <- array(NA, 
                 dim=c(iter, length(method)),
                 dimnames = list(NULL, method)
@@ -41,7 +41,7 @@ lineageA<-tree.rooted$tip.label[lineageA] #having ~15% OTUs in x, ~21.1% abundan
 # sum(colSums(data[,tempA]))/sum(colSums(data))
 
 
-set.seed(seed=2345611)
+set.seed(seed=2345601)
 #for different methods, using the same x.index, x and phylogenetic tree
 #for different iter, using different x and trees
 x.index<-matrix(NA, nrow=n, ncol=iter)#sample size, iter; indexed by g, h
@@ -65,7 +65,9 @@ for(h in 1:iter){
   z[,h] <- scale(signal.strength) + scale(rnorm(n)) #dependent covariate z2+z1
   #generate y
   temp <- rnorm(n, sd=3)
-  y[ ,h] <- beta0 + z[,h] + temp    #to simulate a trait
+  q=beta0 + z[,h] + temp
+  p=exp(q)/(1+exp(q)) #inverse logit function
+  y[ ,h] <- rbinom(n, size= 1, prob = p ) #to simulate a trait
 }
 
 #on computer cluster
@@ -82,13 +84,12 @@ for(h in 1:iter){
   if(sum(!(colnames(x) %in% tree$tip.label))==0) 
     x<-x[,tree$tip.label] else stop("don't match") #order x according to the tree
 	
-  meta<- data.frame(y=y[,h],z=z[,h])
+  meta<- data.frame(y=factor(y[,h]),z=z[,h])
   
   pv1 <- randomForestTest_parallel_omnibus2(comm = x , meta.data = meta, tree=tree, response.var="y", 
-                  adjust.vars = "z", perm.no = 999, n.cores=cores, test.type = "Training",method = "o",
-				  prediction.type = 'Regression')
-  pv1$p.value.perm[c("weighted", "unweighted","Omnibus")]->pv.mat[h,c("wRF", "uwRF","Omnibus.RF")]
+                  adjust.vars = "z", perm.no = 999, n.cores=cores, test.type = "OOB",method = "w")
+  pv1$p.value.perm->pv.mat[h,c("wRF")]
 
-  if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/H0_d_c_r4.RData")
+  if(h %% round(iter/100) == 0) save.image(file="/hpc/home/lz197/RFomnibus/H0_d_b_r12.RData")
 }
-save.image(file="/hpc/home/lz197/RFomnibus/H0_d_c_r4.RData")
+save.image(file="/hpc/home/lz197/RFomnibus/H0_d_b_r12.RData")
